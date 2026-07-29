@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from services.gemini_service import ask_gemini_json
 
 from database.connection import get_db
 from database.models import Lead, CompanyInsight
@@ -34,23 +35,75 @@ def generate_analysis(lead_id: int, db: Session = Depends(get_db)):
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    # Placeholder AI analysis (Gemini integration comes later)
+    prompt = f"""
+You are an AI Sales Analyst.
+
+Analyze this company.
+
+Company Name: {lead.company}
+Industry: {lead.industry}
+
+IMPORTANT:
+
+Return ONLY valid JSON.
+
+Rules:
+
+business_needs -> maximum 2 short sentences
+
+opportunities -> maximum 2 short sentences
+
+industry_analysis -> maximum 2 short sentences
+
+company_size -> only one word:
+Small
+Medium
+Large
+Enterprise
+
+technology_stack -> comma separated technologies only
+
+funding_stage -> one word:
+Bootstrapped
+Seed
+Series A
+Series B
+Public
+Unknown
+
+ai_summary -> maximum 3 short sentences
+
+Return ONLY JSON.
+
+{{
+"business_needs":"",
+"opportunities":"",
+"industry_analysis":"",
+"company_size":"",
+"technology_stack":"",
+"funding_stage":"",
+"ai_summary":""
+}}
+"""
+
+    result = ask_gemini_json(prompt)
+
     new_insight = CompanyInsight(
         lead_id=lead.id,
-        business_needs=f"Placeholder business needs analysis for {lead.company or lead.name}.",
-        opportunities="Placeholder opportunities identified based on current market trends.",
-        industry_analysis=f"Placeholder industry analysis for the {lead.industry or 'general'} sector.",
-        company_size="Unknown (placeholder)",
-        technology_stack="Placeholder technology stack details.",
-        funding_stage="Unknown (placeholder)",
-        ai_summary=f"This is a placeholder AI-generated summary for lead '{lead.name}'.",
+        business_needs=result["business_needs"],
+        opportunities=result["opportunities"],
+        industry_analysis=result["industry_analysis"],
+        company_size=result["company_size"],
+        technology_stack=result["technology_stack"],
+        funding_stage=result["funding_stage"],
+        ai_summary=result["ai_summary"],
     )
 
     db.add(new_insight)
     db.commit()
     db.refresh(new_insight)
-    return new_insight
 
+    return new_insight
 
 # ---------- 2. Get All Insights for a Lead ----------
 @router.get("/{lead_id}", response_model=list[CompanyInsightResponse])

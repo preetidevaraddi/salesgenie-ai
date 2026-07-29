@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from services.gemini_service import ask_gemini_json
 
 from database.connection import get_db
 from database.models import Lead, OutreachCampaign
@@ -38,20 +39,36 @@ def generate_email(lead_id: int, db: Session = Depends(get_db)):
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    # Placeholder personalized email (Gemini integration comes later)
-    placeholder_subject = f"Exploring an opportunity for {lead.company or lead.name}"
-    placeholder_body = (
-        f"Hi {lead.name},\n\n"
-        f"This is a placeholder outreach email for {lead.company or 'your company'}. "
-        f"It will be personalized using AI based on the lead's industry, needs, and profile.\n\n"
-        f"Best regards,\nSalesGenie AI"
-    )
+    prompt = f"""
+You are an AI Sales Assistant.
+
+Generate a professional cold email.
+
+Lead Name: {lead.name}
+Company: {lead.company}
+Industry: {lead.industry}
+
+Return ONLY valid JSON.
+
+Rules:
+- email_subject: maximum 12 words
+- email_body: professional email, maximum 180 words
+
+Return ONLY JSON in this format:
+
+{{
+    "email_subject": "",
+    "email_body": ""
+}}
+"""
+
+    result = ask_gemini_json(prompt)
 
     new_campaign = OutreachCampaign(
         lead_id=lead.id,
-        campaign_name="Cold Email Campaign",
-        email_subject=placeholder_subject,
-        email_body=placeholder_body,
+        campaign_name="AI Cold Email",
+        email_subject=result["email_subject"],
+        email_body=result["email_body"],
         outreach_channel="Email",
         campaign_status="Draft",
     )
@@ -59,9 +76,8 @@ def generate_email(lead_id: int, db: Session = Depends(get_db)):
     db.add(new_campaign)
     db.commit()
     db.refresh(new_campaign)
+
     return new_campaign
-
-
 # ---------- 2. Get All Emails for a Lead ----------
 @router.get("/{lead_id}", response_model=list[OutreachCampaignResponse])
 def get_emails(lead_id: int, db: Session = Depends(get_db)):

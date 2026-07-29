@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from services.gemini_service import ask_gemini_json
 
 from database.connection import get_db
 from database.models import Lead, LeadScore
@@ -47,22 +48,54 @@ def generate_lead_score(lead_id: int, db: Session = Depends(get_db)):
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    # Placeholder scoring logic (NO Gemini)
-    qualification_score = 82
-    conversion_probability = 0.76
-    engagement_level = "High"
-    recommendation = "Lead is highly qualified and should be contacted immediately."
-    next_best_action = "Schedule product demonstration."
-    scoring_model = "Placeholder Rule Engine"
+    prompt = f"""
+You are an AI Sales Qualification Expert.
+
+Analyze this lead.
+
+Name: {lead.name}
+Company: {lead.company}
+Industry: {lead.industry}
+Notes: {lead.notes}
+
+Return ONLY valid JSON.
+
+Rules:
+
+qualification_score -> integer from 0 to 100
+
+conversion_probability -> decimal between 0 and 1
+
+engagement_level -> only one of:
+High
+Medium
+Low
+
+recommendation -> maximum 2 sentences
+
+next_best_action -> maximum 1 sentence
+
+Return ONLY JSON.
+
+{{
+    "qualification_score": 0,
+    "conversion_probability": 0.0,
+    "engagement_level": "",
+    "recommendation": "",
+    "next_best_action": ""
+}}
+"""
+
+    result = ask_gemini_json(prompt)
 
     new_score = LeadScore(
-        lead_id=lead_id,
-        qualification_score=qualification_score,
-        conversion_probability=conversion_probability,
-        engagement_level=engagement_level,
-        recommendation=recommendation,
-        next_best_action=next_best_action,
-        scoring_model=scoring_model,
+        lead_id=lead.id,
+        qualification_score=int(result["qualification_score"]),
+        conversion_probability=float(result["conversion_probability"]),
+        engagement_level=result["engagement_level"],
+        recommendation=result["recommendation"],
+        next_best_action=result["next_best_action"],
+        scoring_model="Gemini 2.5 Flash",
     )
 
     db.add(new_score)
@@ -70,7 +103,6 @@ def generate_lead_score(lead_id: int, db: Session = Depends(get_db)):
     db.refresh(new_score)
 
     return new_score
-
 
 # --------------------------------------------------
 # 2. GET /scoring/{lead_id}

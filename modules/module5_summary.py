@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from services.gemini_service import ask_gemini_json
 
 from database.connection import get_db
 from database.models import Lead, SalesInteraction
@@ -45,25 +46,51 @@ def generate_meeting_summary(lead_id: int, db: Session = Depends(get_db)):
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    # Placeholder meeting summary (NO Gemini)
-    interaction_type = "Meeting"
-    meeting_title = "Product Discussion"
-    interaction_notes = "Discussed customer requirements and product features."
-    ai_summary = (
-        "AI placeholder summary: Customer showed strong interest in the "
-        "product and requested a follow-up demonstration."
-    )
-    action_items = "Schedule product demo and send pricing details."
-    meeting_date = datetime.utcnow()
+    prompt = f"""
+You are an AI Sales Meeting Assistant.
+
+Generate a realistic meeting summary.
+
+Lead Name: {lead.name}
+Company: {lead.company}
+Industry: {lead.industry}
+Notes: {lead.notes}
+
+Return ONLY valid JSON.
+
+Rules:
+
+interaction_type -> Meeting
+
+meeting_title -> maximum 8 words
+
+interaction_notes -> maximum 3 sentences
+
+ai_summary -> maximum 3 sentences
+
+action_items -> maximum 3 bullet points in one string
+
+Return ONLY JSON.
+
+{{
+    "interaction_type":"",
+    "meeting_title":"",
+    "interaction_notes":"",
+    "ai_summary":"",
+    "action_items":""
+}}
+"""
+
+    result = ask_gemini_json(prompt)
 
     new_interaction = SalesInteraction(
-        lead_id=lead_id,
-        interaction_type=interaction_type,
-        meeting_title=meeting_title,
-        interaction_notes=interaction_notes,
-        ai_summary=ai_summary,
-        action_items=action_items,
-        meeting_date=meeting_date,
+        lead_id=lead.id,
+        interaction_type=result["interaction_type"],
+        meeting_title=result["meeting_title"],
+        interaction_notes=result["interaction_notes"],
+        ai_summary=result["ai_summary"],
+        action_items=result["action_items"],
+        meeting_date=datetime.now(),
     )
 
     db.add(new_interaction)
