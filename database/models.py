@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from database.connection import Base
 
 class Lead(Base):
@@ -14,3 +15,106 @@ class Lead(Base):
     status = Column(String(50), default="New")
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company_insights = relationship("CompanyInsight", back_populates="lead")
+    lead_scores = relationship("LeadScore", back_populates="lead")
+    outreach_campaigns = relationship("OutreachCampaign", back_populates="lead")
+    sales_interactions = relationship("SalesInteraction", back_populates="lead")
+    crm_sync_logs = relationship("CRMSyncLog", back_populates="lead")
+    sales_analytics = relationship("SalesAnalytics", back_populates="lead")
+
+class CompanyInsight(Base):
+    __tablename__ = "company_insights"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+    business_needs = Column(Text, nullable=True)
+    opportunities = Column(Text, nullable=True)
+    industry_analysis = Column(Text, nullable=True)
+    company_size = Column(String(100), nullable=True)
+    technology_stack = Column(Text, nullable=True)
+    funding_stage = Column(String(100), nullable=True)
+    ai_summary = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    lead = relationship("Lead", back_populates="company_insights")
+
+class LeadScore(Base):
+    __tablename__ = "lead_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+    qualification_score = Column(Integer, default=0)
+    conversion_probability = Column(Float, default=0.0)
+    engagement_level = Column(String(50), nullable=True)
+    recommendation = Column(Text, nullable=True)
+    next_best_action = Column(Text, nullable=True)
+    scoring_model = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    lead = relationship("Lead", back_populates="lead_scores")
+
+class OutreachCampaign(Base):
+    __tablename__ = "outreach_campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+
+    campaign_name = Column(String(150), nullable=True)
+    email_subject = Column(String(255), nullable=True)
+    email_body = Column(Text, nullable=True)
+    outreach_channel = Column(String(50), nullable=True)
+    campaign_status = Column(String(50), default="Draft")
+
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    lead = relationship("Lead", back_populates="outreach_campaigns")  
+
+class SalesInteraction(Base):
+    __tablename__ = "sales_interactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+    interaction_type = Column(String(50), nullable=True)
+    meeting_title = Column(String(150), nullable=True)
+    interaction_notes = Column(Text, nullable=True)
+    ai_summary = Column(Text, nullable=True)
+    action_items = Column(Text, nullable=True)
+    meeting_date = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    lead = relationship("Lead", back_populates="sales_interactions")
+
+
+class CRMSyncLog(Base):
+    __tablename__ = "crm_sync_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+    crm_name = Column(String(100), nullable=True)
+    sync_type = Column(String(50), nullable=True)
+    sync_status = Column(String(50), default="Pending")
+    records_synced = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    lead = relationship("Lead", back_populates="crm_sync_logs")
+
+
+class SalesAnalytics(Base):
+    __tablename__ = "sales_analytics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+    total_interactions = Column(Integer, default=0)
+    emails_sent = Column(Integer, default=0)
+    meetings_completed = Column(Integer, default=0)
+    lead_score = Column(Integer, default=0)
+    conversion_status = Column(String(50), nullable=True)
+    revenue_generated = Column(Float, default=0.0)
+    last_activity = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    lead = relationship("Lead", back_populates="sales_analytics")  
