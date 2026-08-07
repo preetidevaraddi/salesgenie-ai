@@ -61,14 +61,32 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
 
     total_crm_syncs = db.query(func.count(CRMSyncLog.id)).scalar() or 0
 
-    high_priority_leads = (
-        db.query(func.count(LeadScore.id))
-        .filter(LeadScore.qualification_score >= 80)
-        .scalar()
-        or 0
+    # LeadScore is an append-only history table — every re-score adds a
+    # new row rather than updating the existing one. Averaging /
+    # thresholding over every row in that table (as before) means a
+    # lead that's been re-scored several times gets counted several
+    # times, and a lead's stale old score can still count toward
+    # "high priority" even after a later re-score dropped it below 80.
+    # Restrict both metrics to each lead's single most recent score.
+    latest_score_ids = (
+        db.query(func.max(LeadScore.id).label("latest_id"))
+        .group_by(LeadScore.lead_id)
+        .subquery()
     )
 
-    average_lead_score = db.query(func.avg(LeadScore.qualification_score)).scalar()
+    latest_scores = db.query(LeadScore.qualification_score).filter(
+        LeadScore.id.in_(db.query(latest_score_ids.c.latest_id))
+    )
+
+    high_priority_leads = latest_scores.filter(
+        LeadScore.qualification_score >= 80
+    ).count()
+
+    average_lead_score = db.query(
+        func.avg(LeadScore.qualification_score)
+    ).filter(
+        LeadScore.id.in_(db.query(latest_score_ids.c.latest_id))
+    ).scalar()
     average_lead_score = float(average_lead_score) if average_lead_score is not None else 0
 
     return DashboardResponse(

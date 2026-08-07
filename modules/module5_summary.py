@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from services.gemini_service import ask_gemini_json
 
 from database.connection import get_db
@@ -11,9 +11,7 @@ from database.models import Lead, SalesInteraction
 router = APIRouter(prefix="/summary", tags=["Meeting Summary"])
 
 
-# --------------------------------------------------
 # Pydantic Models
-# --------------------------------------------------
 
 class SalesInteractionResponse(BaseModel):
     id: int
@@ -81,7 +79,14 @@ Return ONLY JSON.
 }}
 """
 
-    result = ask_gemini_json(prompt)
+    try:
+        result = ask_gemini_json(prompt)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI summary generation failed: {str(e)}"
+        )
 
     new_interaction = SalesInteraction(
         lead_id=lead.id,
@@ -90,7 +95,7 @@ Return ONLY JSON.
         interaction_notes=result["interaction_notes"],
         ai_summary=result["ai_summary"],
         action_items=result["action_items"],
-        meeting_date=datetime.now(),
+        meeting_date=datetime.now(timezone.utc),
     )
 
     db.add(new_interaction)
@@ -111,8 +116,11 @@ def get_meeting_summaries(lead_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Lead not found")
 
     interactions = (
-        db.query(SalesInteraction).filter(SalesInteraction.lead_id == lead_id).all()
-    )
+    db.query(SalesInteraction)
+    .filter(SalesInteraction.lead_id == lead_id)
+    .order_by(SalesInteraction.created_at.desc())
+    .all()
+)
     return interactions
 
 
@@ -134,7 +142,7 @@ def update_meeting_summary(
     if not interaction:
         raise HTTPException(status_code=404, detail="SalesInteraction not found")
 
-    update_data = request.dict(exclude_unset=True)
+    update_data = request.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(interaction, key, value)
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database.connection import get_db
 from database.models import Lead, CRMSyncLog
@@ -10,9 +10,7 @@ from database.models import Lead, CRMSyncLog
 router = APIRouter(prefix="/crm", tags=["CRM Integration"])
 
 
-# --------------------------------------------------
 # Pydantic Models
-# --------------------------------------------------
 
 class CRMSyncLogResponse(BaseModel):
     id: int
@@ -52,7 +50,7 @@ def sync_lead_to_crm(lead_id: int, db: Session = Depends(get_db)):
     sync_status = "Success"
     records_synced = 1
     error_message = None
-    synced_at = datetime.utcnow()
+    synced_at = datetime.now(timezone.utc)
 
     new_sync_log = CRMSyncLog(
         lead_id=lead_id,
@@ -81,7 +79,12 @@ def get_crm_sync_logs(lead_id: int, db: Session = Depends(get_db)):
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    sync_logs = db.query(CRMSyncLog).filter(CRMSyncLog.lead_id == lead_id).all()
+    sync_logs = (
+    db.query(CRMSyncLog)
+    .filter(CRMSyncLog.lead_id == lead_id)
+    .order_by(CRMSyncLog.created_at.desc())
+    .all()
+)
     return sync_logs
 
 
@@ -99,7 +102,7 @@ def update_crm_sync_log(
     if not sync_log:
         raise HTTPException(status_code=404, detail="CRMSyncLog not found")
 
-    update_data = request.dict(exclude_unset=True)
+    update_data = request.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(sync_log, key, value)
 
@@ -122,4 +125,4 @@ def delete_crm_sync_log(sync_id: int, db: Session = Depends(get_db)):
     db.delete(sync_log)
     db.commit()
 
-    return {"message": "CRM Syn cLog deleted successfully"}
+    return {"message": "CRM Sync Log deleted successfully"}
